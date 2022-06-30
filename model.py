@@ -32,7 +32,7 @@ def _get_clones(module, N):
 
 class MHAP(nn.Module):
 
-    def __init__(self,dim,heads):
+    def __init__(self,channel,dim,heads):
         super(MHAP, self).__init__()
         self.dim = dim
         self.num_heads = heads
@@ -40,7 +40,7 @@ class MHAP(nn.Module):
         self.fc_k = nn.Linear(dim, dim)
         self.fc_v = nn.Linear(dim, dim)
         self.conv1 = nn.Sequential(
-            nn.Conv1d(384,24,1),
+            nn.Conv1d(channel,24,1),
             nn.ReLU(),
             nn.Conv1d(24,1,1)
         )
@@ -223,9 +223,9 @@ class TTMFN(nn.Module):
 
         TSMCAT = TSMCATlayer(dim,heads,mlp_dim,dropout,activation='gelu')
         self.transformer = TransformerEncoder(TSMCAT , num_layers=depth)
-
-        self.xpool = MHAP(dim,4)
-        self.ypool = MHAP(dim,4)
+        cnum = self.cluster_num * (2 ** depth)
+        self.xpool = MHAP(cnum,dim,4)
+        self.ypool = MHAP(cnum,dim,4)
 
         self.mlp_head = nn.Sequential(
 
@@ -267,7 +267,6 @@ class TTMFN(nn.Module):
 
         y = rearrange(h_omic_bag, 'n b m p -> n (b m) p')
         x,y = self.transformer(x,y)
-
         x =self.xpool(x)
         y = self.ypool(y)
         fusion = torch.cat([x,y],axis=2)
