@@ -253,10 +253,10 @@ def train(train_path, test_path, model_save_path, num_epochs, lr,weight_decay, c
 
     optimizer = torch.optim.Adam(model.parameters(), lr = lr, weight_decay = weight_decay)
 
-    Data = MIL_dataloader(data_path=train_path, cluster_num = cluster_num, train=True)
+    Data = TTMFN_dataloader(data_path=train_path, cluster_num = cluster_num, train=True)
     trainloader,valloader = Data.get_loader()
 
-    TestData = MIL_dataloader(test_path, cluster_num=cluster_num, train=False)
+    TestData = TTMFN_dataloader(test_path, cluster_num=cluster_num, train=False)
 
     testloader = TestData.get_loader()
 
