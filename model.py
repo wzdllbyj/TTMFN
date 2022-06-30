@@ -131,9 +131,6 @@ class TSMCATlayer(nn.Module):
         X_c = self.trans1(x)
         Y_c = self.trans2(x)
 
-        X_c= X_c.mean(dim=1).unsqueeze(1)
-        Y_c= Y_c.mean(dim=1).unsqueeze(1)
-
         X_ = self.self_attn_x(x, y, y)[0]
         Y_ = self.self_attn_y(y, x, x)[0]
 
