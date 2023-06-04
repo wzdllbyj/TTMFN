@@ -15,17 +15,17 @@ torch.cuda.manual_seed_all(0)
 random.seed(0)
 np.random.seed(0)
 class TTMFN_dataloader():
-    def __init__(self, data_path, cluster_num=6, train=True):
+    def __init__(self, data_path,signatures_path,gene_path, cluster_num=6,train=True):
 
         if train:
             X_train, X_test = train_test_split(data_path, test_size=0.25, random_state=66)  # 15% validation
 
-            traindataset = TTMFN_dataset(list_path=X_train, cluster_num = cluster_num, train=train,
+            traindataset = TTMFN_dataset(list_path=X_train, signatures_path=signatures_path,gene_path=gene_path, cluster_num = cluster_num,train=train,
                               transform=transforms.Compose([ToTensor()]))
 
             traindataloader = DataLoader(traindataset, batch_size=1, shuffle=True, num_workers=4)
 
-            valdataset = TTMFN_dataset(list_path=X_test, train=False, cluster_num=cluster_num,
+            valdataset = TTMFN_dataset(list_path=X_test, train=False,signatures_path=signatures_path,gene_path=gene_path, cluster_num=cluster_num,
                                        transform=transforms.Compose([ToTensor()]))
 
             valdataloader = DataLoader(valdataset, batch_size=1, shuffle=False, num_workers=4)
@@ -33,7 +33,7 @@ class TTMFN_dataloader():
             self.dataloader = [traindataloader, valdataloader]
 
         else:
-            testdataset = TTMFN_dataset(list_path=data_path, cluster_num = cluster_num, train=False,
+            testdataset = TTMFN_dataset(list_path=data_path,signatures_path=signatures_path,gene_path=gene_path, cluster_num = cluster_num,train=False,
                               transform=transforms.Compose([ToTensor()]))
             testloader = DataLoader(testdataset, batch_size=1, shuffle=False, num_workers=4)
 
@@ -44,18 +44,20 @@ class TTMFN_dataloader():
 
 
 class TTMFN_dataset(Dataset):
-    def __init__(self, list_path, cluster_num,  transform=None, train=True):
+    def __init__(self, list_path, signatures_path,gene_path,  cluster_num,train=True, transform=None):
         """
         Give npz file path
         :param list_path:
         """
 
         self.list_path = list_path
+        self.signatures_path = signatures_path
+        self.gene_path=gene_path
         self.random = train
         self.transform = transform
         self.cluster_num = cluster_num
-        self.signatures = pd.read_csv('/home/hrg/Survival/LUAD/LUADDataset/LUAD_index.txt',sep='\t',header=None)
-        self.Gene = pd.read_csv('/home/hrg/Survival/LUAD/LUADDataset/LUADGene_norm.csv',index_col=0)
+        self.signatures = pd.read_csv(self.signatures_path,sep='\t',header=None)
+        self.Gene = pd.read_csv(self.gene_path,index_col=0)
     def __len__(self):
         return len(self.list_path)
 

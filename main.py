@@ -14,18 +14,23 @@ from sklearn.model_selection import KFold
 import argparse
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-
+type = "LUAD"
 parser = argparse.ArgumentParser(description='TTMFN')
 parser.add_argument('--cluster_num', type=int, default=6, help='cluster number')
 parser.add_argument('--feat_path', type=str, default='/home/hrg/Survival/LUAD/LUADDataset/Resnet18_npz',
                     help='deep features and cluster label of each patient (e.g. npz files)')
 # csv file stored as patient id, img_path, patient-level survival label
 parser.add_argument('--img_label_path', type=str, default='/home/hrg/Survival/LUAD/LUADDataset/LUADLabel.csv')
+parser.add_argument('--gene_cluster_path', type=str, default='/home/hrg/Survival/LUAD/LUADDataset/LUAD_index.txt') #基因预处理文件路径
+parser.add_argument('--Gene_path', type=str, default='/home/hrg/Survival/LUAD/LUADDataset/LUADGene_norm.csv') #基因表达谱文件的路径
+parser.add_argument('--split_path', type=str, default='/home/hrg/Survival/LUAD/LUADDataset/split/splits_') #MCAT使用的分组文件路劲
 parser.add_argument('--batch_size', type=int, default=1, help='has to be 1')
 parser.add_argument('--nepochs', type=int, default=100, help='The maxium number of epochs to train')
 parser.add_argument('--lr', default=1e-4, type=float, help='learning rate (default: 1e-4)')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='weight_decay rate (default: 5e-4)')
-parser.add_argument('--savepath', type=str, default='../result/LUAD/')
+parser.add_argument('--k', default=0.9, type=float, help='the hyperparameter of MAHP')
+parser.add_argument('--savepath', type=str, default='../result/LUAD1/')
+
 
 
 torch.manual_seed(0)
@@ -33,6 +38,7 @@ torch.cuda.manual_seed_all(0)
 np.random.seed(0)
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 
 def _neg_partial_log(prediction, T, E):
     """
@@ -60,7 +66,7 @@ def _neg_partial_log(prediction, T, E):
 
     return loss_nn
 
-def prediction(model, queryloader, testing=False):
+def prediction(model, queryloader, k, testing=False):
 
     model.eval()
     lbl_pred_all = None
@@ -87,7 +93,7 @@ def prediction(model, queryloader, testing=False):
             status_all.append(status)
 
         # ===================forward=====================
-            lbl_pred = model(graph, mask.to(device),omic)
+            lbl_pred = model(graph, mask.to(device),omic,k)
 
             if iter == 0:
                 lbl_pred_all = lbl_pred
@@ -130,7 +136,7 @@ def prediction(model, queryloader, testing=False):
     return loss.data.item(), c_index
 
 
-def train_epoch(epoch, model, optimizer, trainloader,  measure=1, verbose=1):
+def train_epoch(epoch, model, optimizer, trainloader, k, measure=1, verbose=1):
     model.train()
 
     lbl_pred_all = None
@@ -159,7 +165,7 @@ def train_epoch(epoch, model, optimizer, trainloader,  measure=1, verbose=1):
 
 
         # ===================forward=====================
-        lbl_pred = model(graph, masked_cls,omic)  # prediction
+        lbl_pred = model(graph, masked_cls,omic,k)  # prediction
 
         time = survtime.data.cpu().numpy()
         status = lbl.data.cpu().numpy()
@@ -239,8 +245,10 @@ def train_epoch(epoch, model, optimizer, trainloader,  measure=1, verbose=1):
                   'c_index: {:.4f}, p-value: {:.3e}'.format(c_index, pvalue_pred))
 
 
-def train(train_path, test_path, model_save_path, num_epochs, lr,weight_decay, cluster_num = 10):
-    signatures = pd.read_csv('/home/hrg/Survival/LUAD/LUADDataset/LUAD_index.txt',sep='\t',header=None)
+def train(train_path, test_path, model_save_path, num_epochs, lr,weight_decay, cluster_num = 10,k=0.9):
+    signatures_path = parser.parse_args().gene_cluster_path	
+    gene_path = parser.parse_args().Gene_path	
+    signatures = pd.read_csv(signatures_path,sep='\t',header=None)
 
     omic_size = []
 
@@ -253,10 +261,10 @@ def train(train_path, test_path, model_save_path, num_epochs, lr,weight_decay, c
 
     optimizer = torch.optim.Adam(model.parameters(), lr = lr, weight_decay = weight_decay)
 
-    Data = TTMFN_dataloader(data_path=train_path, cluster_num = cluster_num, train=True)
+    Data = TTMFN_dataloader(data_path=train_path, cluster_num = cluster_num,signatures_path = signatures_path,gene_path = gene_path,train=True)
     trainloader,valloader = Data.get_loader()
 
-    TestData = TTMFN_dataloader(test_path, cluster_num=cluster_num, train=False)
+    TestData = TTMFN_dataloader(test_path, cluster_num=cluster_num, signatures_path=signatures_path,gene_path=gene_path,train=False)
 
     testloader = TestData.get_loader()
 
@@ -269,8 +277,8 @@ def train(train_path, test_path, model_save_path, num_epochs, lr,weight_decay, c
     val_losses = []
 
     for epoch in range(num_epochs):
-        train_epoch(epoch, model, optimizer, trainloader)
-        valid_loss, val_ci = prediction(model, valloader)
+        train_epoch(epoch, model, optimizer, trainloader,k)
+        valid_loss, val_ci = prediction(model, valloader,k)
         scheduler.step(valid_loss)
         val_losses.append(valid_loss)
 
@@ -288,7 +296,7 @@ def train(train_path, test_path, model_save_path, num_epochs, lr,weight_decay, c
     # Use the final saved model to test this time
     model_test.load_state_dict(torch.load(model_save_path))
 
-    _, c_index = prediction(model_test, testloader, testing=True)
+    _, c_index = prediction(model_test, testloader, k,testing=True)
 
     return c_index
 
@@ -333,9 +341,8 @@ if __name__ == '__main__':
     fold = 0
 
 
-    splitpath = '/home/hrg/Survival/LUAD/LUADDataset/split/splits_'
+    splitpath = args.split_path
     for i in range(5):
-        print(i)
         fold+=1
         fpath = splitpath+str(i)+'.csv'
         df = pd.read_csv(fpath, index_col=0)
@@ -357,9 +364,9 @@ if __name__ == '__main__':
 
         if not os.path.exists(apath+'saved_model'):
             os.makedirs(apath+'saved_model')
-        model_save_path = apath+'saved_model'+'/LUAD_model_fold_{}_c_{}.pth'.format(fold, cluster_num)
+        model_save_path = apath+'saved_model/'+type+'_model_fold_{}_c_{}.pth'.format(fold, cluster_num)
 
-        test_ci = train(train_val_patients_pca, test_patients_pca, model_save_path, num_epochs=num_epochs, lr=lr,weight_decay=weight_decay, cluster_num=cluster_num)
+        test_ci = train(train_val_patients_pca, test_patients_pca, model_save_path, num_epochs=num_epochs, lr=lr,weight_decay=weight_decay, cluster_num=cluster_num,k=args.k)
 
         testci.append(test_ci)
 

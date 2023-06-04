@@ -45,7 +45,7 @@ class MHAP(nn.Module):
             nn.Conv1d(24,1,1)
         )
 
-    def forward(self, x):
+    def forward(self, x, k):
 
         Q = self.fc_q(x)
         K = self.fc_k(x)
@@ -59,7 +59,7 @@ class MHAP(nn.Module):
         A = torch.softmax(torch.matmul(Q_, K_.transpose(-1, -2)) / math.sqrt(dim_split), -1)
 
         #top rank
-        _, index = torch.topk(A, int(A.size(-1) * 0.9))
+        _, index = torch.topk(A, int(A.size(-1) * k))
         area = torch.zeros(A.shape).cuda()
         for i in range(index.size(1)):
             for j in range(index.size(-1)):
@@ -245,7 +245,7 @@ class TTMFN(nn.Module):
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
 
-    def forward(self, x, mask,omic):
+    def forward(self, x, mask,omic,k):
 
         h_omic = [self.sig_networks[idx].forward(sig_feat) for idx, sig_feat in enumerate(omic)]
         h_omic_bag = torch.stack(h_omic).unsqueeze(0)
@@ -267,8 +267,8 @@ class TTMFN(nn.Module):
 
         y = rearrange(h_omic_bag, 'n b m p -> n (b m) p')
         x,y = self.transformer(x,y)
-        x =self.xpool(x)
-        y = self.ypool(y)
+        x =self.xpool(x,k)
+        y = self.ypool(y,k)
         fusion = torch.cat([x,y],axis=2)
 
         Y_pred = self.mlp_head(fusion)*self.output_range+self.output_shift
