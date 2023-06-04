@@ -1,0 +1,11 @@
+### Required environment for runing TTMFN
+python 3.6.12
+einops 0.4.1
+lifelines 0.25.11
+numpy 1.19.5
+pandas 1.1.5
+scikit-learn 0.24.0
+torch 1.7.1
+torchvision 0.8.2
+tqdm 4.56.0
+
